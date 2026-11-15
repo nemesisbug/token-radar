@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Launch Radar — every pre-token protocol, ranked by implied value</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="pulse" aria-hidden="true"></span>
+    <div>
+      <h1>TOKEN LAUNCH RADAR</h1>
+      <p class="tagline">Every protocol that records no token, ranked by what its token would be worth if the record stayed as it is.</p>
+    </div>
+  </div>
+  <div class="meta">
+    <span id="asof" class="pill">snapshot —</span>
+    <span class="pill dim">model radar-2</span>
+    <span class="pill dim">no network · static page</span>
+  </div>
+</header>
+
+<section class="stats" id="stats" aria-label="Board totals"></section>
+
+<section class="toolbar" aria-label="Filter and sort the board">
+  <input id="q" type="search" placeholder="Search name or slug…" aria-label="Search protocols" autocomplete="off">
+  <select id="scope" aria-label="Scope">
+    <option value="all">All ranked rows</option>
+    <option value="watchlist">Watchlist only</option>
+    <option value="early">Early finds only</option>
+  </select>
+  <select id="cat" aria-label="Category"><option value="">All categories</option></select>
+  <select id="chain" aria-label="Chain"><option value="">All chains</option></select>
+  <select id="mintvl" aria-label="Minimum TVL">
+    <option value="0">Any TVL</option>
+    <option value="10000000">TVL ≥ $10M</option>
+    <option value="50000000">TVL ≥ $50M</option>
+    <option value="100000000">TVL ≥ $100M</option>
+    <option value="500000000">TVL ≥ $500M</option>
+    <option value="1000000000">TVL ≥ $1B</option>
+  </select>
+  <select id="sort" aria-label="Sort by">
+    <option value="implied">Sort: implied value</option>
+    <option value="tvl">Sort: TVL</option>
+    <option value="growth">Sort: 7-day growth</option>
+    <option value="age">Sort: age</option>
+    <option value="name">Sort: name A–Z</option>
+  </select>
+  <button id="reset" type="button">Reset</button>
+  <span id="count" class="count" role="status"></span>
+</section>
+
+<p class="legend" aria-label="Signal legend">
+  <span><i class="dot hot"></i> Surging · 7d ≥ +15%</span>
+  <span><i class="dot warm"></i> Warming · 7d ≥ +5%</span>
+  <span><i class="dot steady"></i> Steady · 7d −5% to +5%</span>
+  <span><i class="dot cool"></i> Cooling · 7d &lt; −5%</span>
+  <span class="sep">|</span>
+  <span><b class="wl">WATCHLIST</b> = the house floor: TVL ≥ $50M, records no token, not a wrapped, staked or bridged product.</span>
+</p>
+
+<main>
+  <table class="board" id="board">
+    <thead>
+      <tr>
+        <th class="num">#</th>
+        <th>Protocol</th>
+        <th>Category</th>
+        <th>Chains</th>
+        <th class="num">TVL</th>
+        <th class="num">7d</th>
+        <th class="num">Age</th>
+        <th class="num">Implied value</th>
+        <th>Signal</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p id="empty" class="empty" hidden>No protocol matches this filter. Loosen it, or reset.</p>
+  <p class="hint">Click any row for its detail view: the model breakdown and the farm plan. Rank is the model's claim; the table may be sorted any way you like.</p>
+</main>
+
+<aside id="drawer" class="drawer" aria-label="Protocol detail" hidden>
+  <button id="close" type="button" aria-label="Close detail">✕</button>
+  <div id="detail"></div>
+</aside>
+
+<section class="live">
+  <h2>Already trading — shown at market value, never ranked</h2>
+  <p class="sub">These protocols record a token, so the board does not rank them. Their market cap is the market's own value, not a model's. The top 24 by market cap:</p>
+  <table class="board slim">
+    <thead><tr><th>Protocol</th><th>Category</th><th>Chains</th><th class="num">TVL</th><th class="num">Market cap</th><th class="num">7d</th></tr></thead>
+    <tbody id="liveRows"></tbody>
+  </table>
+</section>
+
+<section class="sandbox">
+  <h2>Model sandbox — change the model, watch the board move</h2>
+  <p class="sub">The submitted board is fixed at radar-2's constants. These sliders re-score the rows in your browser with the same formula, so you can see what the model is made of. Nothing here changes board.json.</p>
+  <div class="sliders">
+    <label>Base multiple <output id="oBase">0.30× TVL</output>
+      <input id="sBase" type="range" min="0.1" max="0.5" step="0.05" value="0.3"></label>
+    <label>Growth weight <output id="oGrowth">0.60</output>
+      <input id="sGrowth" type="range" min="0" max="1" step="0.1" value="0.6"></label>
+    <label>Maturity floor <output id="oMat">0.55</output>
+      <input id="sMat" type="range" min="0.3" max="0.8" step="0.05" value="0.55"></label>
+    <button id="sReset" type="button">Back to radar-2</button>
+  </div>
+  <p id="sandboxNote" class="sandbox-note" hidden>Showing sandbox values — the submitted board keeps radar-2.</p>
+</section>
+
+<section class="method">
+  <h2>How the radar works</h2>
+  <div class="formula">implied = TVL × 0.30 × (1 + clamp(7d, −60%, +120%) × 0.6) × (0.55 + min(age, 1095d) ÷ 1095 × 0.45) × (1 + min(chains − 1, 4) × 0.025)</div>
+  <ul>
+    <li><b>TVL</b> is the size of the business a token would capitalise. <b>Seven-day growth</b> is its direction. <b>Age with no token</b> is how long the launch has been deferred. <b>Chain breadth</b> is how widely the business is already distributed.</li>
+    <li><b>Coverage:</b> all 40 watchlist protocols, plus every other rankable pre-token protocol below the $50M floor — 226 rows, not a sample. Versioned pools (a name ending in V2, 2.0 and the like) and exchanges are left out.</li>
+    <li><b>“Records no token” is not “has no token.”</b> DefiLlama's record is not proof: a protocol on this board may still carry a token its record omits. Nothing here predicts whether or when a token launches, and nothing here is financial advice.</li>
+    <li><b>Farm plans</b> are derived from each protocol's own category, chains, TVL and age — never from a hand-written list of names. Each step states what it costs and how long it takes. Never pay to claim: a real claim is always free to check.</li>
+  </ul>
+</section>
+
+<footer>
+  <span id="src">Source: DefiLlama protocols snapshot.</span>
+  <span>Token Launch Radar · model radar-2 · static, no network.</span>
+</footer>
+
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
