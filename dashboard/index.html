@@ -17,7 +17,7 @@
   </div>
   <div class="meta">
     <span id="asof" class="pill">snapshot —</span>
-    <span class="pill dim">model radar-3</span>
+    <span class="pill dim">model radar-4</span>
     <span class="pill dim">no network · static page</span>
   </div>
 </header>
@@ -36,6 +36,17 @@
     <p class="farmall" id="farmAll"></p>
   </div>
   <div class="cards" id="shortlist"></div>
+</section>
+
+<section class="shortlist risers" aria-label="Early Risers — taking off right now">
+  <div class="sec-head">
+    <div>
+      <p class="kicker">Early — before the crowd</p>
+      <h2>Early Risers — taking off right now</h2>
+      <p class="sub">Not the biggest — the fastest. Ranked by rise score: the TVL dollars gained in 7 days, times a growth factor. A small protocol doubling in a week beats a giant drifting sideways.</p>
+    </div>
+  </div>
+  <div class="cards" id="risers"></div>
 </section>
 
 <section class="toolbar" aria-label="Filter and sort the board">
@@ -127,37 +138,47 @@
   </table>
 </section>
 
+<section class="candidates">
+  <h2>On the edge — above the floor, not on the watchlist</h2>
+  <p class="sub">These protocols record no token and hold TVL above the $50M floor, but the house watchlist leaves them out — and the board does not rank them. The snapshot carries no parent-protocol field, so whether one of them is another protocol's product cannot be checked from the data; that is why they are shown apart, unranked, instead of silently ranked or silently dropped. <span id="candCount"></span></p>
+  <table class="board slim">
+    <thead><tr><th>Protocol</th><th>Category</th><th>Chains</th><th class="num">TVL</th><th class="num">7d</th><th class="num">Age</th></tr></thead>
+    <tbody id="candRows"></tbody>
+  </table>
+</section>
+
 <section class="sandbox">
   <h2>Model sandbox — change the model, watch the board move</h2>
-  <p class="sub">The submitted board is fixed at radar-3's constants. These sliders re-score the rows in your browser with the same formula, so you can see what the model is made of. Nothing here changes board.json.</p>
+  <p class="sub">The submitted board is fixed at radar-4's constants. These sliders re-score the rows in your browser with the same formula, so you can see what the model is made of. Nothing here changes board.json.</p>
   <div class="sliders">
-    <label>Base multiple <output id="oBase">0.30× TVL</output>
-      <input id="sBase" type="range" min="0.1" max="0.5" step="0.05" value="0.3"></label>
+    <label>Comp scale <output id="oBase">1.00× comp</output>
+      <input id="sBase" type="range" min="0.5" max="2" step="0.1" value="1"></label>
     <label>Growth weight <output id="oGrowth">0.60</output>
       <input id="sGrowth" type="range" min="0" max="1" step="0.1" value="0.6"></label>
     <label>Maturity floor <output id="oMat">0.55</output>
       <input id="sMat" type="range" min="0.3" max="0.8" step="0.05" value="0.55"></label>
-    <button id="sReset" type="button">Back to radar-3</button>
+    <button id="sReset" type="button">Back to radar-4</button>
   </div>
-  <p id="sandboxNote" class="sandbox-note" hidden>Showing sandbox values — the submitted board keeps radar-3.</p>
+  <p id="sandboxNote" class="sandbox-note" hidden>Showing sandbox values — the submitted board keeps radar-4.</p>
 </section>
 
 <section class="method">
   <h2>How the radar works</h2>
-  <div class="formula">implied = TVL × 0.30 × (1 + clamp(7d, −60%, +120%) × 0.6) × (0.55 + min(age, 1095d) ÷ 1095 × 0.45) × (1 + min(chains − 1, 4) × 0.025)</div>
-  <div class="formula strike">strike = implied × momentum — ×1.15 surging (7d ≥ +15%), ×1.08 warming (≥ +5%), ×1.00 steady, ×0.95 cooling (&lt; −5%)</div>
+  <div class="formula">implied = TVL × comp × (1 + clamp(7d, −60%, +120%) × 0.6) × (0.55 + min(age, 1095d) ÷ 1095 × 0.45) × (1 + min(chains − 1, 4) × 0.025)</div>
+  <div class="formula strike">comp = the protocol's category's median mcap/TVL among this snapshot's live-token protocols (global median when the category has fewer than 5) · strike = implied × momentum — ×1.15 surging (7d ≥ +15%), ×1.08 warming (≥ +5%), ×1.00 steady, ×0.95 cooling (&lt; −5%) · rise = 7d TVL dollar gain × (1 + min(7d, 200%) ÷ 100)</div>
   <ul>
+    <li><b>Comp, not a flat multiple.</b> The snapshot's own live tokens price a Dex at 0.34× TVL and a Lending protocol at 0.13× — one number for every category priced the board off its own evidence. Each protocol's detail view names its comp, the category median it came from, and how many live tokens it rests on. Medians, never means, so one outlier cannot drag a category; multiples are clamped to 0.05–1.00.</li>
     <li><b>TVL</b> is the size of the business a token would capitalise. <b>Seven-day growth</b> is its direction. <b>Age with no token</b> is how long the launch has been deferred. <b>Chain breadth</b> is how widely the business is already distributed. <b>Momentum</b> is whether the moment is now: a launch follows attention, so a surging protocol is a better farm today than a cooling one of equal value.</li>
-    <li><b>The Shortlist</b> ranks by strike score, not by implied value — that is the whole point. The board itself stays ranked by implied value alone, so the Shortlist is a view over the board, never a second board.</li>
-    <li><b>Coverage:</b> all 40 watchlist protocols, plus every other rankable pre-token protocol below the $50M floor — 226 rows, not a sample. Versioned pools (a name ending in V2, 2.0 and the like) and exchanges are left out.</li>
+    <li><b>The Shortlist</b> ranks by strike score, not by implied value — that is the whole point. The board itself stays ranked by implied value alone, so the Shortlist is a view over the board, never a second board. <b>Early Risers</b> is a different question again: what is taking off right now, ranked by rise score, so a small protocol doubling in a week is not buried under the giants.</li>
+    <li><b>Coverage:</b> all 40 watchlist protocols, plus every other rankable pre-token protocol below the $50M floor — 226 rows, not a sample. Versioned pools (a name ending in V2, 2.0 and the like), exchanges, and wrapped, staked or bridged products are left out. The 20 protocols above the floor that the watchlist leaves out and that no snapshot field marks as a product are listed apart, unranked, under “On the edge” — the snapshot carries no parent-protocol field, so their status cannot be checked from the data.</li>
     <li><b>“Records no token” is not “has no token.”</b> DefiLlama's record is not proof: a protocol on this board may still carry a token its record omits. Nothing here predicts whether or when a token launches, and nothing here is financial advice.</li>
-    <li><b>Farm plans</b> are derived from each protocol's own category, chains, TVL and age — never from a hand-written list of names. Each step states what it costs and how long it takes, and each plan names the chain's gas token so a later step never stalls for want of it. Never pay to claim: a real claim is always free to check.</li>
+    <li><b>Farm plans</b> are derived from each protocol's own category, chains, TVL, age and seven-day growth — never from a hand-written list of names. Each step states what it costs and how long it takes, and each plan names the chain's gas token so a later step never stalls for want of it. A surging protocol's plan says move this week; a cooling one's says do not chase it. Never pay to claim: a real claim is always free to check.</li>
   </ul>
 </section>
 
 <footer>
   <span id="src">Source: DefiLlama protocols snapshot.</span>
-  <span>Token Launch Radar · model radar-3 · static, no network.</span>
+  <span>Token Launch Radar · model radar-4 · static, no network.</span>
 </footer>
 
 <script src="../data.js"></script>

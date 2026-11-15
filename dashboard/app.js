@@ -58,19 +58,21 @@
   }
 
   // The model, in the page, so the sandbox runs the same formula as main.ts:
-  // implied = TVL x base x (1 + growth x weight) x maturity x breadth.
-  function score(r, base, weight, floor) {
+  // implied = TVL x comp(category median mcap/TVL) x (1 + growth x weight) x maturity x breadth.
+  // compScale rescales every row's comp multiple at once: 1.00 is radar-4.
+  function score(r, compScale, weight, floor) {
     var growth = clampGrowth(r.change_7d);
     var gm = 1 + (growth / 100) * weight;
     var age = r.age_days == null ? MODEL.unknown_age_days : r.age_days;
     var mm = floor + (Math.min(Math.max(age, 0), MODEL.maturity_days) / MODEL.maturity_days) * (1 - floor);
     var extra = Math.min(Math.max(r.chains.length - 1, 0), MODEL.breadth_max_extra_chains);
     var bm = 1 + extra * MODEL.breadth_step;
-    return { implied: Math.max(1, Math.round(r.tvl_usd * base * gm * mm * bm)), gm: gm, mm: mm, bm: bm };
+    var base = r.tvl_usd * r.comp_multiple * compScale;
+    return { implied: Math.max(1, Math.round(base * gm * mm * bm)), base: Math.round(base), gm: gm, mm: mm, bm: bm };
   }
 
   var state = { q: '', scope: 'all', cat: '', chain: '', mintvl: 0, sort: 'implied' };
-  var sandbox = null; // {base, weight, floor} once a slider moves off radar-3
+  var sandbox = null; // {scale, weight, floor} once a slider moves off radar-4
   var maxImplied = Math.max.apply(null, D.rows.map(function (r) { return r.implied_value_usd; }));
   var maxStrike = Math.max.apply(null, D.rows.map(function (r) { return r.strike_score_usd; }));
 
@@ -80,7 +82,7 @@
   }).slice(0, 10);
 
   function shownValue(r) {
-    return sandbox ? score(r, sandbox.base, sandbox.weight, sandbox.floor).implied : r.implied_value_usd;
+    return sandbox ? score(r, sandbox.scale, sandbox.weight, sandbox.floor).implied : r.implied_value_usd;
   }
   function shownStrike(r) {
     return Math.max(1, Math.round(shownValue(r) * strikeMult(r.change_7d)));
@@ -182,6 +184,37 @@
     }).join('');
   }
 
+  function renderRisers() {
+    var risers = D.risers || [];
+    var maxRise = Math.max.apply(null, risers.map(function (r) { return r.rise_score_usd; }).concat([1]));
+    $('risers').innerHTML = risers.map(function (r, i) {
+      var s = signal(r);
+      var w = Math.max(4, Math.round((r.rise_score_usd / maxRise) * 100));
+      return '<div class="card rise' + (i === 0 ? ' first' : '') + '" tabindex="0" data-slug="' + esc(r.slug) + '">' +
+        '<span class="crank">RISING #' + (i + 1) + ' · board #' + r.board_rank + '</span>' +
+        '<span class="cname">' + esc(r.name) + '</span>' +
+        '<span class="ccat">' + esc(r.category || '—') + ' · ' + esc(r.chains.slice(0, 1).join(', ') || '—') + '</span>' +
+        '<div class="cvals"><span class="strike"><span class="lbl">Rise</span> <b>' + money(r.rise_score_usd) + '</b></span>' +
+        '<span><span class="lbl">Implied</span> <b>' + money(r.implied_value_usd) + '</b></span></div>' +
+        '<span class="cbar"><i style="width:' + w + '%"></i></span>' +
+        '<span class="csig sig ' + s.cls + '">' + s.label + ' ' + pct(r.change_7d) + ' <span class="ccost">· +' + money(r.dollar_gain_usd) + ' TVL in 7d</span></span></div>';
+    }).join('');
+  }
+
+  function renderCandidates() {
+    var cands = D.candidates || [];
+    $('candCount').textContent = cands.length + ' protocols above the $50M floor that the watchlist leaves out — shown apart, unranked.';
+    $('candRows').innerHTML = cands.map(function (p) {
+      return '<tr>' +
+        '<td><span class="pname">' + esc(p.name) + '</span><br><span class="pslug">' + esc(p.slug) + '</span></td>' +
+        '<td>' + esc(p.category || '—') + '</td>' +
+        '<td class="chains">' + esc(p.chains.slice(0, 3).join(', ')) + '</td>' +
+        '<td class="num">' + money(p.tvl_usd) + '</td>' +
+        '<td class="num ' + pctCls(p.change_7d) + '">' + pct(p.change_7d) + '</td>' +
+        '<td class="num">' + ageFmt(p.age_days) + '</td></tr>';
+    }).join('');
+  }
+
   function renderGrowthMix() {
     var counts = { hot: 0, warm: 0, steady: 0, cool: 0 };
     D.rows.forEach(function (r) {
@@ -275,9 +308,13 @@
     for (var i = 0; i < D.rows.length; i++) if (D.rows[i].slug === slug) { r = D.rows[i]; break; }
     if (!r) return;
     var s = signal(r);
-    var sc = score(r, MODEL.base_multiple, MODEL.growth_weight, MODEL.maturity_floor);
+    var sc = score(r, 1, MODEL.growth_weight, MODEL.maturity_floor);
     var strike = Math.max(1, Math.round(r.implied_value_usd * strikeMult(r.change_7d)));
     var strikeRank = shortlist.findIndex(function (x) { return x.slug === r.slug; });
+    var riserRank = (D.risers || []).findIndex(function (x) { return x.slug === r.slug; });
+    var compNote = esc(r.comp_source === 'category'
+      ? (r.category || 'Uncategorised') + ' median, ' + r.comp_n + ' live tokens'
+      : 'global median — ' + (r.category || 'Uncategorised') + ' has too few live tokens');
     var steps = r.farm_steps.map(function (st) {
       var p = parseStep(st);
       return '<li>' + esc(p.text) +
@@ -289,6 +326,7 @@
       '<span class="pslug">' + esc(r.slug) + '</span>' +
       (r.on_watchlist ? '<span class="badge">WATCHLIST</span>' : '<span class="badge" style="background:rgba(45,212,191,.12);color:var(--teal)">EARLY FIND</span>') +
       (strikeRank >= 0 ? '<span class="badge strike">SHORTLIST #' + (strikeRank + 1) + '</span>' : '') +
+      (riserRank >= 0 ? '<span class="badge rise">RISER #' + (riserRank + 1) + '</span>' : '') +
       ' <span class="sig ' + s.cls + '">' + s.label + '</span></div>' +
       '<p class="d-why"><b>Why now:</b> ' + esc(whyNow(r)) + '</p>' +
       '<div class="d-stats">' +
@@ -299,16 +337,18 @@
       '<div><b>' + money(strike) + '</b><span>Strike score' + (strikeRank >= 0 ? ' · Shortlist #' + (strikeRank + 1) : '') + '</span></div>' +
       '<div><b>$' + r.capital_usd + '</b><span>Capital to farm · hold ' + r.hold_days + 'd</span></div>' +
       '</div>' +
-      '<h4>Model breakdown — radar-3</h4>' +
+      '<h4>Model breakdown — radar-4</h4>' +
       '<div class="d-model">' +
-      '<div class="mrow"><span>Base · TVL × 0.30</span><b>' + money(sc.implied / (sc.gm * sc.mm * sc.bm)) + '</b></div>' +
+      '<div class="mrow"><span>Comp · ' + compNote + '</span><b>×' + r.comp_multiple.toFixed(2) + '</b></div>' +
+      '<div class="mrow"><span>Base · TVL × comp</span><b>' + money(sc.base) + '</b></div>' +
       '<div class="mrow"><span>Growth × · 7d ' + pct(r.change_7d) + '</span><b>×' + sc.gm.toFixed(2) + '</b></div>' +
       '<div class="mrow"><span>Maturity × · ' + ageFmt(r.age_days) + ' with no token</span><b>×' + sc.mm.toFixed(2) + '</b></div>' +
       '<div class="mrow"><span>Breadth × · ' + r.chains.length + ' chain' + (r.chains.length === 1 ? '' : 's') + '</span><b>×' + sc.bm.toFixed(2) + '</b></div>' +
       '<div class="mrow"><span>Implied value</span><b>' + money(r.implied_value_usd) + '</b></div>' +
       '<div class="mrow"><span>Strike × · momentum ' + pct(r.change_7d) + '</span><b>×' + strikeMult(r.change_7d).toFixed(2) + '</b></div>' +
       '<div class="mrow"><span>Strike score</span><b>' + money(strike) + '</b></div>' +
-      '<p class="eq">implied = base × growth × maturity × breadth · strike = implied × momentum</p></div>' +
+      (riserRank >= 0 ? '<div class="mrow"><span>Rise · Early Riser #' + (riserRank + 1) + '</span><b>' + money((D.risers[riserRank] || {}).rise_score_usd) + '</b></div>' : '') +
+      '<p class="eq">implied = TVL × comp × growth × maturity × breadth · strike = implied × momentum · rise = 7d TVL gain × (1 + min(7d, 200%) ÷ 100)</p></div>' +
       '<h4>Farm plan — 7 steps</h4>' +
       '<ol class="d-farm">' + steps + '</ol>' +
       '<p class="d-risk"><b>What can go wrong:</b> ' + esc(r.risk) + '</p>' +
@@ -320,20 +360,20 @@
   // --- Sandbox ---
   function readSandbox() {
     var b = parseFloat($('sBase').value), g = parseFloat($('sGrowth').value), m = parseFloat($('sMat').value);
-    $('oBase').textContent = b.toFixed(2) + '× TVL';
+    $('oBase').textContent = b.toFixed(2) + '× comp';
     $('oGrowth').textContent = g.toFixed(2);
     $('oMat').textContent = m.toFixed(2);
-    if (b === MODEL.base_multiple && g === MODEL.growth_weight && m === MODEL.maturity_floor) {
+    if (b === 1 && g === MODEL.growth_weight && m === MODEL.maturity_floor) {
       sandbox = null;
       $('sandboxNote').hidden = true;
     } else {
-      sandbox = { base: b, weight: g, floor: m };
+      sandbox = { scale: b, weight: g, floor: m };
       $('sandboxNote').hidden = false;
     }
     renderRows();
   }
   function resetSandbox() {
-    $('sBase').value = MODEL.base_multiple; $('sGrowth').value = MODEL.growth_weight; $('sMat').value = MODEL.maturity_floor;
+    $('sBase').value = 1; $('sGrowth').value = MODEL.growth_weight; $('sMat').value = MODEL.maturity_floor;
     readSandbox();
   }
 
@@ -367,6 +407,15 @@
     var card = e.target.closest('[data-slug]');
     if (card) openDetail(card.getAttribute('data-slug'));
   });
+  $('risers').addEventListener('click', function (e) {
+    var card = e.target.closest('[data-slug]');
+    if (card) openDetail(card.getAttribute('data-slug'));
+  });
+  $('risers').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var card = e.target.closest('[data-slug]');
+    if (card) openDetail(card.getAttribute('data-slug'));
+  });
   $('close').addEventListener('click', closeDetail);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDetail(); });
   ['sBase', 'sGrowth', 'sMat'].forEach(function (id) { $(id).addEventListener('input', readSandbox); });
@@ -376,6 +425,8 @@
   renderStats();
   renderFarmFirst();
   renderShortlist();
+  renderRisers();
+  renderCandidates();
   renderGrowthMix();
   renderFilters();
   renderLive();
@@ -387,6 +438,12 @@
     $('cat').value = 'Lending';
   }
   renderRows();
+  if (shot === 'board' || shot === 'filtered') {
+    // The board and filtered shots show the ranked table, not just the hero:
+    // scroll the filter bar into view so the table header and rows fill the shot.
+    var bar = document.querySelector('.toolbar');
+    if (bar && bar.scrollIntoView) bar.scrollIntoView({ block: 'start' });
+  }
   if (shot === 'detail') {
     var slug = params.get('slug') || (shortlist[0] && shortlist[0].slug) || (D.rows[0] && D.rows[0].slug);
     if (slug) openDetail(slug);
