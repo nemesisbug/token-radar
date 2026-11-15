@@ -3,26 +3,40 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Launch Radar — every pre-token protocol, ranked by implied value</title>
+<title>Token Launch Radar — the Shortlist: ten pre-token protocols to farm first</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <header class="top">
   <div class="brand">
-    <span class="pulse" aria-hidden="true"></span>
+    <span class="sweep" aria-hidden="true"><i></i></span>
     <div>
       <h1>TOKEN LAUNCH RADAR</h1>
-      <p class="tagline">Every protocol that records no token, ranked by what its token would be worth if the record stayed as it is.</p>
+      <p class="tagline">Every pre-token protocol, ranked by implied value — and the ten to farm first, right now.</p>
     </div>
   </div>
   <div class="meta">
     <span id="asof" class="pill">snapshot —</span>
-    <span class="pill dim">model radar-2</span>
+    <span class="pill dim">model radar-3</span>
     <span class="pill dim">no network · static page</span>
   </div>
 </header>
 
+<p class="farmfirst" id="farmFirst" role="status"></p>
+
 <section class="stats" id="stats" aria-label="Board totals"></section>
+
+<section class="shortlist" aria-label="The Shortlist — ten protocols to farm first">
+  <div class="sec-head">
+    <div>
+      <p class="kicker">Farm this first</p>
+      <h2>The Shortlist — ten to farm first</h2>
+      <p class="sub">Not the ten biggest — the ten whose value is highest and whose moment is now.</p>
+    </div>
+    <p class="farmall" id="farmAll"></p>
+  </div>
+  <div class="cards" id="shortlist"></div>
+</section>
 
 <section class="toolbar" aria-label="Filter and sort the board">
   <input id="q" type="search" placeholder="Search name or slug…" aria-label="Search protocols" autocomplete="off">
@@ -43,6 +57,7 @@
   </select>
   <select id="sort" aria-label="Sort by">
     <option value="implied">Sort: implied value</option>
+    <option value="strike">Sort: strike score</option>
     <option value="tvl">Sort: TVL</option>
     <option value="growth">Sort: 7-day growth</option>
     <option value="age">Sort: age</option>
@@ -58,7 +73,9 @@
   <span><i class="dot steady"></i> Steady · 7d −5% to +5%</span>
   <span><i class="dot cool"></i> Cooling · 7d &lt; −5%</span>
   <span class="sep">|</span>
-  <span><b class="wl">WATCHLIST</b> = the house floor: TVL ≥ $50M, records no token, not a wrapped, staked or bridged product.</span>
+  <span><b class="wl">WATCHLIST</b> = TVL ≥ $50M, records no token.</span>
+  <span class="sep">|</span>
+  <span class="mix" id="growthMix" aria-label="Growth mix"></span>
 </p>
 
 <main>
@@ -73,14 +90,28 @@
         <th class="num">7d</th>
         <th class="num">Age</th>
         <th class="num">Implied value</th>
+        <th class="num">Strike</th>
         <th>Signal</th>
       </tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
   <p id="empty" class="empty" hidden>No protocol matches this filter. Loosen it, or reset.</p>
-  <p class="hint">Click any row for its detail view: the model breakdown and the farm plan. Rank is the model's claim; the table may be sorted any way you like.</p>
+  <p class="hint">Click any row for its detail view: the model breakdown, why now, the risk, and the farm plan. Rank is the model's claim; the table may be sorted any way you like.</p>
 </main>
+
+<section class="charts" aria-label="Charts">
+  <div class="chart">
+    <h2>Where the value sits — top 10 by implied value</h2>
+    <p class="sub">The board's head is heavy: the top few protocols carry most of the implied value. The Shortlist is not this list — it is value times momentum.</p>
+    <div id="chartTop" class="bars"></div>
+  </div>
+  <div class="chart">
+    <h2>By category — rows and implied value</h2>
+    <p class="sub">Which corners of the market hold the pre-token value. Lending and Dexs dominate the board; the rest is spread thin.</p>
+    <div id="chartCat" class="bars"></div>
+  </div>
+</section>
 
 <aside id="drawer" class="drawer" aria-label="Protocol detail" hidden>
   <button id="close" type="button" aria-label="Close detail">✕</button>
@@ -98,7 +129,7 @@
 
 <section class="sandbox">
   <h2>Model sandbox — change the model, watch the board move</h2>
-  <p class="sub">The submitted board is fixed at radar-2's constants. These sliders re-score the rows in your browser with the same formula, so you can see what the model is made of. Nothing here changes board.json.</p>
+  <p class="sub">The submitted board is fixed at radar-3's constants. These sliders re-score the rows in your browser with the same formula, so you can see what the model is made of. Nothing here changes board.json.</p>
   <div class="sliders">
     <label>Base multiple <output id="oBase">0.30× TVL</output>
       <input id="sBase" type="range" min="0.1" max="0.5" step="0.05" value="0.3"></label>
@@ -106,25 +137,27 @@
       <input id="sGrowth" type="range" min="0" max="1" step="0.1" value="0.6"></label>
     <label>Maturity floor <output id="oMat">0.55</output>
       <input id="sMat" type="range" min="0.3" max="0.8" step="0.05" value="0.55"></label>
-    <button id="sReset" type="button">Back to radar-2</button>
+    <button id="sReset" type="button">Back to radar-3</button>
   </div>
-  <p id="sandboxNote" class="sandbox-note" hidden>Showing sandbox values — the submitted board keeps radar-2.</p>
+  <p id="sandboxNote" class="sandbox-note" hidden>Showing sandbox values — the submitted board keeps radar-3.</p>
 </section>
 
 <section class="method">
   <h2>How the radar works</h2>
   <div class="formula">implied = TVL × 0.30 × (1 + clamp(7d, −60%, +120%) × 0.6) × (0.55 + min(age, 1095d) ÷ 1095 × 0.45) × (1 + min(chains − 1, 4) × 0.025)</div>
+  <div class="formula strike">strike = implied × momentum — ×1.15 surging (7d ≥ +15%), ×1.08 warming (≥ +5%), ×1.00 steady, ×0.95 cooling (&lt; −5%)</div>
   <ul>
-    <li><b>TVL</b> is the size of the business a token would capitalise. <b>Seven-day growth</b> is its direction. <b>Age with no token</b> is how long the launch has been deferred. <b>Chain breadth</b> is how widely the business is already distributed.</li>
+    <li><b>TVL</b> is the size of the business a token would capitalise. <b>Seven-day growth</b> is its direction. <b>Age with no token</b> is how long the launch has been deferred. <b>Chain breadth</b> is how widely the business is already distributed. <b>Momentum</b> is whether the moment is now: a launch follows attention, so a surging protocol is a better farm today than a cooling one of equal value.</li>
+    <li><b>The Shortlist</b> ranks by strike score, not by implied value — that is the whole point. The board itself stays ranked by implied value alone, so the Shortlist is a view over the board, never a second board.</li>
     <li><b>Coverage:</b> all 40 watchlist protocols, plus every other rankable pre-token protocol below the $50M floor — 226 rows, not a sample. Versioned pools (a name ending in V2, 2.0 and the like) and exchanges are left out.</li>
     <li><b>“Records no token” is not “has no token.”</b> DefiLlama's record is not proof: a protocol on this board may still carry a token its record omits. Nothing here predicts whether or when a token launches, and nothing here is financial advice.</li>
-    <li><b>Farm plans</b> are derived from each protocol's own category, chains, TVL and age — never from a hand-written list of names. Each step states what it costs and how long it takes. Never pay to claim: a real claim is always free to check.</li>
+    <li><b>Farm plans</b> are derived from each protocol's own category, chains, TVL and age — never from a hand-written list of names. Each step states what it costs and how long it takes, and each plan names the chain's gas token so a later step never stalls for want of it. Never pay to claim: a real claim is always free to check.</li>
   </ul>
 </section>
 
 <footer>
   <span id="src">Source: DefiLlama protocols snapshot.</span>
-  <span>Token Launch Radar · model radar-2 · static, no network.</span>
+  <span>Token Launch Radar · model radar-3 · static, no network.</span>
 </footer>
 
 <script src="../data.js"></script>

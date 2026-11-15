@@ -4,7 +4,13 @@
 [![rank](https://make.fun/badge/token-radar-01/nemesisbug/token-radar/rank.svg)](https://make.fun/bounty/token-radar-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
 [![reward](https://make.fun/badge/token-radar-01/nemesisbug/token-radar/reward.svg)](https://make.fun/bounty/token-radar-01?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
 
-Token Launch Radar — every pre-token protocol ranked by implied value. 226 rows: all 40 watchlist protocols plus every other rankable pre-token protocol below the $50M floor, scored by model radar-2 (TVL × seven-day growth × age with no token × chain breadth), each with a concrete 7-step farm plan stating what it costs and how long it takes. The dashboard is a static page — sortable, filterable, with a detail view per protocol, a live-token comparison, and a model sandbox — and it runs with no network.
+Token Launch Radar — every pre-token protocol ranked by implied value, and the ten to farm first, right now.
+
+The board is 226 rows: all 40 watchlist protocols plus every other rankable pre-token protocol below the $50M floor, scored by model radar-3 (TVL × seven-day growth × age with no token × chain breadth). Each row carries a concrete 7-step farm plan stating what it costs and how long it takes, the chain's gas token, and what can go wrong.
+
+The Shortlist is the point. Implied value says what a token would be worth; the strike score says when to farm it — implied value times momentum (×1.15 surging, ×1.08 warming, ×1.00 steady, ×0.95 cooling). The Shortlist ranks the ten highest strike scores, so a surging protocol outranks a cooling one of equal value. The board itself stays ranked by implied value alone, so the Shortlist is a view over the board, never a second board. The page answers, in one line at the top, "farm this first", and totals what farming all ten costs.
+
+The dashboard is a static page — sortable (now including strike score), filterable, with a detail view per protocol (model breakdown, why now, risk, farm plan), a live-token comparison, charts of where the value sits, and a model sandbox — and it runs with no network.
 
 ## Run it
 

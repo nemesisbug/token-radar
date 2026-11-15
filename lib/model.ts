@@ -1,4 +1,4 @@
-// Token Launch Radar — model radar-2.
+// Token Launch Radar — model radar-3.
 //
 // One sealed snapshot in, one ranked board out. The board ranks every
 // protocol the snapshot records as pre-token and rankable: the 40 on the
@@ -18,14 +18,24 @@
 //   breadth   = 1 + min(chains - 1, 4) x BREADTH_STEP
 //   implied   = max(1, round(base x growthMul x maturity x breadth))
 //
-// Why these four terms: TVL is the size of the business a token would
+// radar-3 adds a second, separate layer on top of that same implied value:
+// the STRIKE SCORE, which answers when to farm, not just what it is worth.
+// A protocol that is surging right now is a better farm today than one of
+// equal value that is cooling, because a launch follows attention: the
+// strike score is implied value times a momentum multiplier from the same
+// seven-day growth the model already reads, and the dashboard's Shortlist
+// ranks by it. The board itself stays ranked by implied value alone, so
+// the Shortlist is a view over the board, never a second board.
+//
+// Why these terms: TVL is the size of the business a token would
 // capitalise; seven-day growth is its direction; age with no token is how
 // long the launch has been deferred (a protocol that has run for years
 // with no token has a longer record to price, and a later, larger
 // distribution to catch up on); chain breadth is how widely that business
-// is already distributed. A protocol that "records no token" is described
-// as exactly that, never as "has no token": DefiLlama's record is not
-// proof, and a listed protocol may still carry a token its record omits.
+// is already distributed; momentum is whether the moment is now. A protocol
+// that "records no token" is described as exactly that, never as "has no
+// token": DefiLlama's record is not proof, and a listed protocol may still
+// carry a token its record omits.
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -78,7 +88,18 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it. */
-export const MODEL_VERSION = 'radar-2';
+export const MODEL_VERSION = 'radar-3';
+
+/** The strike score's momentum bands, from the same seven-day growth. */
+export const STRIKE = {
+  surging_min: 15,
+  warming_min: 5,
+  cooling_max: -5,
+  surging_mult: 1.15,
+  warming_mult: 1.08,
+  steady_mult: 1.0,
+  cooling_mult: 0.95,
+};
 
 /** How many live-token protocols the Live view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -132,6 +153,10 @@ export interface RadarRow {
   age_days: number | null;
   on_watchlist: boolean;
   implied_value_usd: number;
+  strike_score_usd: number;
+  capital_usd: number;
+  hold_days: number;
+  risk: string;
   base_usd: number;
   growth_multiplier: number;
   maturity_multiplier: number;
@@ -157,6 +182,7 @@ export interface RadarData {
   floor_usd: number;
   model: ModelConstants;
   model_version: string;
+  strike: { surging_min: number; warming_min: number; cooling_max: number; surging_mult: number; warming_mult: number; steady_mult: number; cooling_mult: number };
   watchlist_size: number;
   board_size: number;
   early_size: number;
@@ -213,7 +239,88 @@ export function impliedValue(
   return { implied, base: Math.round(base), growthPct, growthMult, maturityMult, breadthMult, age };
 }
 
-/** DefiLlama's version-marker rule: a name ending in a release is a pool of another protocol. */
+/** The strike multiplier from a protocol's seven-day growth: the moment, not the value. */
+export function strikeMultiplier(change7d: number | null): number {
+  if (change7d === null) return STRIKE.steady_mult;
+  if (change7d >= STRIKE.surging_min) return STRIKE.surging_mult;
+  if (change7d >= STRIKE.warming_min) return STRIKE.warming_mult;
+  if (change7d <= STRIKE.cooling_max) return STRIKE.cooling_mult;
+  return STRIKE.steady_mult;
+}
+
+/** The strike score: implied value times momentum. A surging protocol of equal value outranks a cooling one — farm the surge first. */
+export function strikeScore(impliedUsd: number, change7d: number | null): number {
+  return Math.max(1, Math.round(impliedUsd * strikeMultiplier(change7d)));
+}
+
+/** The strike band's name, for the dashboard's labels. */
+export function strikeBand(change7d: number | null): 'surging' | 'warming' | 'steady' | 'cooling' {
+  if (change7d === null) return 'steady';
+  if (change7d >= STRIKE.surging_min) return 'surging';
+  if (change7d >= STRIKE.warming_min) return 'warming';
+  if (change7d <= STRIKE.cooling_max) return 'cooling';
+  return 'steady';
+}
+
+/** The gas token a chain settles in, for the farm plan's cost line. Generic chain knowledge, never a protocol name. */
+const GAS_TOKEN: Record<string, string> = {
+  Ethereum: 'ETH',
+  Solana: 'SOL',
+  Base: 'ETH',
+  Arbitrum: 'ETH',
+  Optimism: 'ETH',
+  Polygon: 'POL',
+  Avalanche: 'AVAX',
+  'BNB Chain': 'BNB',
+  BSC: 'BNB',
+  Gnosis: 'xDAI',
+  Fantom: 'FTM',
+  Linea: 'ETH',
+  zkSync: 'ETH',
+  Scroll: 'ETH',
+  Blast: 'ETH',
+  Mantle: 'MNT',
+  Sei: 'SEI',
+  Sui: 'SUI',
+  Aptos: 'APT',
+  Near: 'NEAR',
+  Cosmos: 'ATOM',
+  Osmosis: 'OSMO',
+  Tron: 'TRX',
+  Cardano: 'ADA',
+  Algorand: 'ALGO',
+  Tezos: 'XTZ',
+  Polkadot: 'DOT',
+  Kusama: 'KSM',
+  Starknet: 'STRK',
+  Injective: 'INJ',
+  Berachain: 'BERA',
+  Hyperliquid: 'HYPE',
+  Monad: 'MON',
+  MegaETH: 'ETH',
+};
+
+/** A chain's gas token, or the neutral phrase when the chain names none known. */
+export function gasToken(chain: string): string {
+  return GAS_TOKEN[chain] ?? "the chain's gas token";
+}
+
+/** What can go wrong farming a category: the risk the plan prices in, from the category alone. */
+export function riskFor(category: string | null): string {
+  const c = (category ?? '').toLowerCase();
+  if (c.includes('dex') || c.includes('liquidity manager')) return 'Impermanent loss: the pair can drift apart while the position sits, and a thin pool can move the price on entry and exit.';
+  if (c.includes('lend') || c.includes('cdp') || c.includes('collateral')) return 'Liquidation: a borrowed position can be liquidated if the collateral falls, so borrow far less than the supply allows.';
+  if (c.includes('bridge') || c.includes('cross chain')) return 'Bridge risk: a bridge holds the funds in transit, and a bridge that halts leaves them stuck until it resumes.';
+  if (c.includes('staking') || c.includes('restak')) return 'Slashing and lock-up: a staked position can be cut for validator faults, and an unstake can take days to release.';
+  if (c.includes('perpetual') || c.includes('derivative') || c.includes('options') || c.includes('synthetic')) return 'Leverage cuts both ways: a small move against a margined position can wipe the margin before the hedge pays.';
+  if (c.includes('yield') || c.includes('farm') || c.includes('leveraged farm') || c.includes('curator') || c.includes('allocator')) return 'Vault risk: the vault is a smart contract, and a bug or a bad strategy in it can take the deposit with it.';
+  if (c.includes('stable') || c.includes('algo-stable')) return 'Depeg: a stable asset can slip below its peg, and a slip that holds turns the holding into a loss.';
+  if (c.includes('rwa')) return 'Counterparty risk: a real-world asset is only as good as its issuer and custodian, and both sit outside the chain.';
+  if (c.includes('insurance')) return 'Claim risk: a policy pays only when its terms say so, and a claim can be denied on a technicality.';
+  if (c.includes('prediction')) return 'A prediction position is a bet: a market that resolves the other way takes the stake in full.';
+  if (c.includes('launchpad')) return 'A launchpad sale can sell out, and a stake that qualifies for nothing still locks the funds for the period.';
+  return 'Smart-contract risk: the position lives in a contract, and a bug in it can take the deposit with it.';
+}
 const VERSIONED = /\s(V\d+(\.\d+)?|v\d+(\.\d+)?|\d+\.\d+)$/;
 
 /** Whether a protocol records no token at all. */
@@ -297,10 +404,10 @@ function chainOf(p: SnapshotProtocol): string {
 }
 
 /** How much capital one farm position needs, from the protocol's own TVL. */
-function capitalFor(p: SnapshotProtocol): number {
-  if (p.tvl_usd >= 5_000_000_000) return 300;
-  if (p.tvl_usd >= 1_000_000_000) return 200;
-  if (p.tvl_usd >= 100_000_000) return 120;
+function capitalFor(tvlUsd: number): number {
+  if (tvlUsd >= 5_000_000_000) return 300;
+  if (tvlUsd >= 1_000_000_000) return 200;
+  if (tvlUsd >= 100_000_000) return 120;
   return 75;
 }
 
@@ -393,10 +500,11 @@ function secondActionFor(p: SnapshotProtocol, capital: number, chain: string): s
  */
 export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const chain = chainOf(p);
-  const capital = capitalFor(p);
+  const capital = capitalFor(p.tvl_usd);
   const hold = holdDaysFor(age);
   const action = actionFor(p, capital, chain);
   const second = secondActionFor(p, capital, chain);
+  const gas = gasToken(chain);
   return [
     {
       text: `Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline on paper.`,
@@ -404,7 +512,7 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       time: '5 minutes',
     },
     {
-      text: action,
+      text: `${action} Keep about $10 of ${gas} in the wallet for gas so a later step never stalls for want of it.`,
       cost: `$${capital} of capital and about $${capital >= 200 ? 8 : 4} of gas`,
       time: '15 minutes to set up',
     },
@@ -467,6 +575,10 @@ export function radarRow(row: BoardRow): RadarRow {
     age_days: row.age_days,
     on_watchlist: row.on_watchlist,
     implied_value_usd: row.implied_value_usd,
+    strike_score_usd: strikeScore(row.implied_value_usd, row.change_7d),
+    capital_usd: capitalFor(row.tvl_usd),
+    hold_days: holdDaysFor(row.age_days),
+    risk: riskFor(row.category),
     base_usd: row.model.base_usd,
     growth_multiplier: row.model.growth_multiplier,
     maturity_multiplier: row.model.maturity_multiplier,
@@ -488,6 +600,7 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     floor_usd: snapshot.floor_usd,
     model,
     model_version: MODEL_VERSION,
+    strike: STRIKE,
     watchlist_size: snapshot.watchlist.length,
     board_size: board.length,
     early_size: early,
